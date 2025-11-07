@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lost Dimensions</title>
+    
+    <!-- Load Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // --- TAILWIND CONFIGURATION ---
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'void-dark': '#05040a',
+                        'void-mid': '#07102a',
+                        'void-light': '#0b0620',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- --- CUSTOM CSS STYLING SECTION (For transitions and effects) --- -->
+    <style>
+        /* CRITICAL: Disable global scrolling and enforce 100% height for the body */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevents the main window scrollbar */
+        }
+
+        /* Helper class to make the content section take the remaining height and handle scrolling */
+        /* Nav height is 80px (pt-20) */
+        .content-area-wrapper {
+            height: calc(100vh - 80px); 
+            overflow-y: auto; /* Allows content to scroll internally */
+            padding-top: 80px; /* Offset the content from the fixed navigation bar */
+        }
+
+        /* Base class for page transitions (hidden initially) */
+        .page-container {
+            opacity: 0;
+            transform: translateY(20px); 
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+            pointer-events: none; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+        }
+        /* Active class for visible page */
+        .page-container.active {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+            position: relative; 
+        }
+
+        /* Styling for staggered animation items */
+        .animated-item {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+
+        /* Card hover animation */
+        .monster-card {
+            transition: all 0.3s ease-in-out;
+        }
+        .monster-card:hover {
+            transform: scale(1.02);
+            /* Custom shadow to mimic the purple glow */
+            box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.5), 0 4px 6px -2px rgba(139, 92, 246, 0.05); 
+        }
+        
+        /* Utility class to hide content from screen readers only (for mandatory user ID display) */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
+</head>
+<!-- --- HTML STRUCTURE SECTION --- -->
+<body class="h-screen font-sans text-slate-200 bg-gradient-to-b from-void-dark via-void-mid to-void-light">
+
+    <div id="app-container" class="h-full">
+        <!-- Navigation Bar (Fixed at top) - Explicitly set height to 20 (80px) -->
+        <nav id="nav-component" class="w-full flex items-center justify-between px-6 py-4 fixed top-0 bg-void-dark/90 backdrop-blur-sm z-10 border-b border-slate-700/50 h-20">
+            <div class="flex items-center gap-3">
+                <div class="text-2xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-purple-300">
+                    Lost Dimensions
+                </div>
+                <div class="text-xs text-slate-400">— a Roblox experience</div>
+            </div>
+            
+            <!-- Auth Status (Right Side) -->
+            <div class="flex items-center gap-4">
+                <!-- Navigation Links -->
+                <div id="nav-links" class="hidden lg:flex items-center gap-4">
+                    <!-- Links injected by JS -->
+                </div>
+
+                <!-- Auth Status (Login/Sign Out button injected immediately by JS) -->
+                <div id="nav-auth-status" class="hidden md:flex items-center">
+                    <!-- Content injected here instantly upon auth change -->
+                </div>
+                
+                <!-- Mobile Select (Visible below desktop breakpoint) -->
+                <div class="md:hidden">
+                    <select id="mobile-nav-select" class="bg-transparent text-sm text-slate-300 border border-slate-700 p-2 rounded-md">
+                        <!-- Options injected by JS -->
+                    </select>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main Content Wrapper - Uses custom CSS class to manage height and scrolling -->
+        <main class="content-area-wrapper">
+            <!-- Loading Indicator shown while Firebase Auth initializes -->
+            <div id="loading-spinner" class="h-64 flex justify-center items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+                <p class="ml-4 text-slate-400">Loading dimensions...</p>
+            </div>
+            
+            <div id="page-content" class="relative">
+                <!-- Page content rendered here by JS -->
+            </div>
+        </main>
+        
+        <!-- --- LOGIN MODAL STRUCTURE --- -->
+        <div id="login-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center transition-opacity duration-300">
+            <div id="modal-content" class="bg-void-dark border border-purple-500/50 rounded-xl p-8 w-full max-w-sm shadow-2xl transform scale-95 transition-transform duration-300">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-500">Log In</h3>
+                    <button onclick="closeLoginModal()" class="text-slate-400 text-2xl hover:text-white transition-colors leading-none">&times;</button>
+                </div>
+
+                <form onsubmit="event.preventDefault(); handleAuthSubmit(this)">
+                    <div class="mb-4">
+                        <label for="auth-email" class="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                        <input type="email" id="auth-email" name="email" required placeholder="example@gmail.com" class="w-full p-3 bg-void-mid border border-slate-700 rounded-lg text-white focus:ring-purple-500 focus:border-purple-500 outline-none">
+                    </div>
+                    <div class="mb-6">
+                        <label for="auth-password" class="block text-sm font-medium text-slate-400 mb-1">Password</label>
+                        <input type="password" id="auth-password" name="password" required placeholder="minimum 6 characters" minlength="6" class="w-full p-3 bg-void-mid border border-slate-700 rounded-lg text-white focus:ring-purple-500 focus:border-purple-500 outline-none">
+                    </div>
+                    
+                    <button type="submit" id="auth-submit-btn" class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-lg text-white font-bold transition-all shadow-lg shadow-purple-900/50 transform hover:scale-[1.01]">
+                        Log In / Register
+                    </button>
+                    <p id="auth-message" class="mt-4 text-center text-sm text-red-400 hidden"></p>
+                    <p class="mt-4 text-center text-xs text-slate-500">
+                        No account? Entering a new email will register you instantly.
+                    </p>
+                </form>
+            </div>
+        </div>
+        <!-- --- END LOGIN MODAL STRUCTURE --- -->
+        
+        <!-- --- CUSTOM CONFIRMATION MODAL STRUCTURE (Replaces forbidden confirm()) --- -->
+        <div id="confirmation-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center transition-opacity duration-300">
+            <div class="bg-void-dark border border-red-500/50 rounded-xl p-6 w-full max-w-xs shadow-2xl">
+                <h3 class="text-xl font-bold text-red-400 mb-4">Confirm Action</h3>
+                <p id="confirm-message-text" class="text-slate-300 mb-6"></p>
+                <div class="flex justify-between space-x-4">
+                    <button id="confirm-button-no" class="w-full py-2 border border-slate-600/50 rounded-lg text-slate-300 hover:bg-slate-700 transition">
+                        Cancel
+                    </button>
+                    <button id="confirm-button-yes" class="w-full py-2 bg-red-600/70 hover:bg-red-500 rounded-lg text-white font-bold transition">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- --- END CUSTOM CONFIRMATION MODAL STRUCTURE --- -->
+
+        <!-- --- MONSTER DETAIL MODAL STRUCTURE --- -->
+        <div id="monster-detail-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center transition-opacity duration-300">
+            <div id="monster-detail-content" class="bg-void-dark border border-purple-500/50 rounded-xl p-8 w-full max-w-lg shadow-2xl transform scale-95 transition-transform duration-300">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h3 id="modal-monster-name" class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-500 mb-2"></h3>
+                        <span id="modal-monster-level" class="text-sm font-mono bg-purple-600/80 px-3 py-1 rounded-full"></span>
+                    </div>
+                    <button onclick="closeMonsterDetailsModal()" class="text-slate-400 text-2xl hover:text-white transition-colors leading-none">&times;</button>
+                </div>
+
+                <div class="mb-6">
+                    <img id="modal-monster-image" src="" alt="Monster Image" class="w-full h-48 object-cover rounded-lg mb-4 border border-slate-700/50">
+                    <p id="modal-monster-description" class="text-slate-300 text-base italic border-l-2 border-slate-500 pl-4"></p>
+                </div>
+                
+                <button onclick="closeMonsterDetailsModal()" class="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-lg text-white font-bold transition-all shadow-lg shadow-purple-900/50 transform hover:scale-[1.01]">
+                    Close File
+                </button>
+            </div>
+        </div>
+        <!-- --- END MONSTER DETAIL MODAL STRUCTURE --- -->
+
+    </div>
+
+    <!-- --- JAVASCRIPT LOGIC SECTION (FIREBASE & APP LOGIC) --- -->
+    <script type="module">
+        // Import necessary Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // ADDED Firestore methods for real-time data and CRUD
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, setDoc, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+        // Global Firebase instances and user state
+        let app, db, auth;
+        let currentUserId = null;
+        let isAdmin = false; // State for admin status
+        let appInitialized = false;
+        let initialSiteTextLoaded = false; // Flag to ensure initialization only happens after first data load
+
+        // Global state for Home Page editing
+        let isEditingHomeText = false; 
+        // NEW: Global state for community link editing
+        let isEditingCommunityLink = false;
+        // NEW: Global state for About page editing
+        let isEditingAboutText = false;
+        // NEW: Global state for Game URL editing
+        let isEditingGameUrl = false;
+
+
+        // NEW: Global state for admin forms
+        let isCreatingMonster = false;
+        let editingMonsterId = null;
+        let isCreatingEvent = false;
+        let editingEventId = null;
+
+        // MANDATORY GLOBAL VARS (Provided by the environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // --- FIREBASE CONFIGURATION (Provided by user) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBUBxcSmeC3gIt37UPtaKMx7Bh-z3e65Bk",
+            authDomain: "lost-dimensions.firebaseapp.com",
+            projectId: "lost-dimensions",
+            storageBucket: "lost-dimensions.firebasestorage.app",
+            messagingSenderId: "170020247329",
+            appId: "1:170020247329:web:682644bd84a7ed3dfd5060",
+            measurementId: "G-KSJXYKGCC6"
+        };
+        // --- END FIREBASE CONFIGURATION ---
+
+        // --- APP DATA DEFINITIONS ---
+        // Removed GAME_ID and GAME_URL constants as they are now dynamic
+        const NAV_LINKS_ALL = ["home", "monsters", "events", "community", "about"];
+        
+        // Initial hardcoded data structure for first-run population of Firestore
+        const initialMonsters = [
+            { name: "Rift Stalker", image: `https://placehold.co/420x420/542E71/ffffff?text=Rift+Stalker`, description: "A shadow-twisted predator that slides through dimensional rifts — divers report a chill that freezes light itself before it strikes.", level: "Class IV" },
+            { name: "Ashen Wailer", image: `https://placehold.co/420x420/3A405A/ffffff?text=Ashen+Wailer`, description: "Once a guardian of ancient ruins, now a suffering spirit bound to fog and stone. Its wails crack the air and summon creeping despair.", level: "Class III" },
+            { name: "Obsidian Colossus", image: `https://placehold.co/420x420/212121/ffffff?text=Obsidian+Colossus`, description: "Giant, armor-like plates of volcanic glass armor its body. Moves slowly but its steps fold reality into jagged fractures.", level: "Class V" },
+        ];
+        const initialEvents = [
+            { title: "The Ashfall Ascent", date: "Nov 15 - Nov 29", status: "Active", description: "A surge in Ashen Wailer activity has been detected. Complete challenges in the Ashfall Crater to earn exclusive Wailer-themed weapon skins and double XP.", theme: "bg-red-900/40 border-red-700" },
+            { title: "Obsidian Core Hunt", date: "Dec 3 - Dec 17", status: "Upcoming", description: "Colossus sightings are increasing. Find and neutralize Obsidian Colossus fragments across 5 different dimensions to earn the 'Obsidian Breaker' badge.", theme: "bg-gray-900/40 border-gray-700" },
+        ];
+        
+        // Dynamic state initialized with defaults
+        let siteText = { 
+            title: 'Lost Dimensions', 
+            subtitle: 'An immersive Roblox experience where reality bends and ancient secrets await discovery.',
+            communityLink: 'https://discord.gg/rift-divers-community-placeholder',
+            // NEW: Default game URL
+            gameUrl: 'https://www.roblox.com/games/1234567890/lost-dimensions-placeholder',
+            // NEW: Default About Page content
+            aboutContent: `The Dimensional Collapse: Our Story is set in the fractured remnants of the Prime World, shattered when the mysterious Fracture Gate activated. This catastrophic event, known as the Dimensional Collapse, tore holes into countless parallel realities, flooding our world with the hostile ecology of the Void Rifts. Players take on the role of Rift Divers—elite scavengers and mercenaries who dive into these unstable portals to recover forgotten technology and stabilize the rifts before the collapse consumes everything. Be wary: the deeper you go, the more the rules of physics break down, and the more terrifying the indigenous 'Dimensional Threats' becomes. Your goal is not just survival, but the very reconstruction of reality itself.`
+        };
+        let monstersData = [];
+        let eventsData = [];
+        
+        // Admin Configuration (Update this to your administrative emails)
+        const ADMIN_EMAILS = ["pocialj@gmail.com", "goatlife751@gmail.com"]; 
+
+        let currentPage = null; 
+        const pageContent = document.getElementById('page-content');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const basePublicPath = `/artifacts/${appId}/public/data`;
+        // --- END OF APP DATA DEFINITIONS ---
+
+
+        // --- UI & NAVIGATION LOGIC ---
+        
+        function buildNavigation() {
+            const navLinksContainer = document.getElementById('nav-links');
+            const mobileSelect = document.getElementById('mobile-nav-select');
+            navLinksContainer.innerHTML = '';
+            mobileSelect.innerHTML = '';
+
+            NAV_LINKS_ALL.forEach(link => {
+                // Desktop Button creation
+                const button = document.createElement('button');
+                button.textContent = link.toUpperCase();
+                button.dataset.page = link;
+                button.className = 'uppercase text-sm px-3 py-2 rounded-md transition-transform transform-gpu hover:scale-105 focus:outline-none text-slate-300/90';
+                button.onclick = () => navigateTo(link);
+                navLinksContainer.appendChild(button);
+
+                // Mobile Option creation
+                const option = document.createElement('option');
+                option.value = link;
+                option.textContent = link.charAt(0).toUpperCase() + link.slice(1);
+                option.className = 'bg-gray-900 text-white';
+                mobileSelect.appendChild(option);
+            });
+            
+            // Attach event listener to mobile select
+            mobileSelect.addEventListener('change', (e) => navigateTo(e.target.value));
+        }
+
+        window.navigateTo = function(page) {
+            const contentWrapper = document.querySelector('.content-area-wrapper');
+            if (contentWrapper) {
+                contentWrapper.scrollTop = 0;
+            }
+
+            const activePages = document.querySelectorAll('.page-container.active');
+            activePages.forEach(p => p.classList.remove('active'));
+            
+            // Reset editing/creating states when navigating away
+            if (currentPage === 'monsters' && page !== 'monsters') {
+                isCreatingMonster = false;
+                editingMonsterId = null;
+            }
+            if (currentPage === 'events' && page !== 'events') {
+                isCreatingEvent = false;
+                editingEventId = null;
+            }
+            if (currentPage === 'community' && page !== 'community') {
+                isEditingCommunityLink = false;
+            }
+            // NEW: Reset about editing state when navigating away
+            if (currentPage === 'about' && page !== 'about') {
+                isEditingAboutText = false;
+            }
+             // NEW: Reset game URL editing state when navigating away from home
+            if (currentPage === 'home' && page !== 'home') {
+                isEditingGameUrl = false;
+            }
+            
+            currentPage = page;
+            updateNavigationUI();
+            
+            setTimeout(() => {
+                const targetPage = document.getElementById(page + '-page');
+                if (targetPage) {
+                    targetPage.classList.add('active');
+                    applyStaggeredAnimations(targetPage);
+                }
+                
+                // Ensure Home Page UI (Login/Play buttons) updates immediately when auth state changes
+                if (page === 'home') {
+                    // Update home page buttons area right before rendering
+                    updateHomePageAuthArea(auth?.currentUser);
+                }
+            }, 10); 
+        }
+
+        function applyStaggeredAnimations(pageElement) {
+            const items = pageElement.querySelectorAll('.animated-item');
+            items.forEach((item, index) => {
+                void item.offsetWidth;
+                item.style.transitionDelay = `${index * 0.15}s`;
+                item.style.opacity = '1';
+                item.style.transform = 'translateY(0)';
+            });
+        }
+        
+        function updateNavigationUI() {
+            // Rebuild nav bar links 
+            buildNavigation();
+
+            // Update link buttons state
+            document.querySelectorAll('#nav-links button').forEach(button => {
+                button.classList.remove('bg-gradient-to-r', 'from-indigo-800/40', 'to-purple-900/30', 'text-white', 'shadow-lg');
+                button.classList.add('text-slate-300/90');
+                if (button.dataset.page === currentPage) {
+                    button.classList.add('bg-gradient-to-r', 'from-indigo-800/40', 'to-purple-900/30', 'text-white', 'shadow-lg');
+                    button.classList.remove('text-slate-300/90');
+                }
+            });
+            // Update mobile select state
+            const mobileSelect = document.getElementById('mobile-nav-select');
+            if (mobileSelect) mobileSelect.value = currentPage;
+        }
+
+        /**
+         * Updates the navigation bar's right-side with Log In or Sign Out button.
+         * @param {firebase.User | null} user 
+         */
+        function updateNavigationAuthStatus(user) {
+            const navAuthStatus = document.getElementById('nav-auth-status');
+            if (!navAuthStatus) return;
+
+            // Clear any previous status
+            navAuthStatus.innerHTML = '';
+            
+            // If the user object is available (meaning auth state is determined)
+            if (user) {
+                // Display the Sign Out button
+                const signOutButton = document.createElement('button');
+                signOutButton.textContent = "Sign Out";
+                signOutButton.className = 'text-sm px-3 py-1 rounded-full bg-red-600/70 hover:bg-red-500/80 transition text-white font-semibold';
+                signOutButton.onclick = handleSignOut;
+                navAuthStatus.appendChild(signOutButton);
+
+            } else {
+                // Display the Log In button
+                const loginButton = document.createElement('button');
+                loginButton.textContent = "Log In";
+                loginButton.className = 'text-sm px-3 py-1 rounded-full bg-slate-200/10 border border-slate-700/50 text-slate-200 hover:bg-slate-200/20 transition font-semibold';
+                loginButton.onclick = showLoginModal;
+                navAuthStatus.appendChild(loginButton);
+            }
+        }
+
+
+        // --- CUSTOM CONFIRMATION MODAL LOGIC (Replaces forbidden confirm()) ---
+        window.showConfirmation = function(message) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmation-modal');
+                const messageEl = document.getElementById('confirm-message-text');
+                const confirmBtn = document.getElementById('confirm-button-yes');
+                const cancelBtn = document.getElementById('confirm-button-no');
+
+                // Update message
+                messageEl.textContent = message;
+                
+                // Setup resolution handlers
+                const cleanup = () => {
+                    modal.classList.add('hidden');
+                    confirmBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                };
+
+                confirmBtn.onclick = () => {
+                    cleanup();
+                    resolve(true);
+                };
+                
+                cancelBtn.onclick = () => {
+                    cleanup();
+                    resolve(false);
+                };
+
+                // Show modal
+                modal.classList.remove('hidden');
+            });
+        };
+        // --- END CUSTOM CONFIRMATION MODAL LOGIC ---
+
+
+        // --- MONSTER DETAIL MODAL LOGIC (NEW) ---
+        window.closeMonsterDetailsModal = function() {
+            const modal = document.getElementById('monster-detail-modal');
+            const modalContent = document.getElementById('monster-detail-content');
+            
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+            modal.style.opacity = 0;
+
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        window.showMonsterDetails = function(monster) {
+            if (!monster) return;
+
+            document.getElementById('modal-monster-name').textContent = monster.name;
+            document.getElementById('modal-monster-level').textContent = `Level: ${monster.level || 'Unknown'}`;
+            document.getElementById('modal-monster-image').src = monster.image;
+            document.getElementById('modal-monster-image').alt = monster.name;
+            document.getElementById('modal-monster-description').textContent = monster.description;
+            
+            const modal = document.getElementById('monster-detail-modal');
+            const modalContent = document.getElementById('monster-detail-content');
+
+            modal.classList.remove('hidden');
+            modalContent.classList.remove('scale-95');
+            void modal.offsetWidth; 
+            modal.style.opacity = 1;
+            modalContent.classList.add('scale-100');
+        }
+        // --- END MONSTER DETAIL MODAL LOGIC ---
+
+
+        // --- LOGIN MODAL AND AUTH LOGIC ---
+
+        window.closeLoginModal = function() {
+            const modal = document.getElementById('login-modal');
+            const modalContent = document.getElementById('modal-content');
+            
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+            modal.style.opacity = 0;
+
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.getElementById('auth-message').classList.add('hidden');
+            }, 300);
+        }
+
+        window.showLoginModal = function() {
+            if (!auth) {
+                console.error("Firebase Auth not initialized.");
+                return;
+            }
+
+            const modal = document.getElementById('login-modal');
+            const modalContent = document.getElementById('modal-content');
+            
+            modal.classList.remove('hidden');
+            modalContent.classList.remove('scale-95');
+            void modal.offsetWidth; 
+            modal.style.opacity = 1;
+            modalContent.classList.add('scale-100');
+        }
+
+        function displayAuthError(message, type = 'error') {
+            const msgElement = document.getElementById('auth-message');
+            msgElement.textContent = message;
+            msgElement.classList.remove('hidden', 'text-red-400', 'text-green-400');
+            if (type === 'error') {
+                msgElement.classList.add('text-red-400');
+            } else {
+                msgElement.classList.add('text-green-400');
+            }
+        }
+        
+        window.handleAuthSubmit = async function(form) {
+            if (!auth) {
+                displayAuthError("Authentication system not initialized.");
+                return;
+            }
+
+            const email = form.elements['email'].value;
+            const password = form.elements['password'].value;
+            const submitBtn = document.getElementById('auth-submit-btn');
+
+            displayAuthError("Processing...", 'info');
+            submitBtn.disabled = true;
+
+            try {
+                // 1. Attempt to Sign In
+                await signInWithEmailAndPassword(auth, email, password);
+                displayAuthError("Login successful! Welcome back, Diver.", 'success');
+                setTimeout(closeLoginModal, 1500);
+
+            } catch (signInError) {
+                // 2. Sign In failed. Attempt to register instead (as per "Log In / Register" logic).
+                try {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    displayAuthError("Registration successful! Welcome to the Rift Divers.", 'success');
+                    setTimeout(closeLoginModal, 1500);
+                } catch (regError) {
+                    let errorToDisplay = regError;
+                    let msg = "Authentication failed.";
+
+                    if (errorToDisplay.code === 'auth/email-already-in-use') {
+                        msg = "Invalid password. Please check your credentials."; 
+                    } else if (errorToDisplay.code === 'auth/weak-password') {
+                        msg = "Password must be at least 6 characters long.";
+                    } else if (errorToDisplay.code === 'auth/invalid-email') {
+                        msg = "The email address is not valid.";
+                    } else if (errorToDisplay.code === 'auth/invalid-credential') {
+                        msg = "Invalid credentials. Please check your email and password.";
+                    } else {
+                        msg = `Authentication Error: ${errorToDisplay.message}`;
+                    }
+
+                    displayAuthError(msg);
+                }
+            } finally {
+                submitBtn.disabled = false;
+                const msgElement = document.getElementById('auth-message');
+                displayAuthError(msgElement.textContent, msgElement.classList.contains('text-green-400') ? 'success' : 'error');
+            }
+        }
+        
+        window.handleSignOut = async function() {
+            if (!auth) {
+                console.error("Firebase Auth not initialized.");
+                return;
+            }
+            try {
+                // Reset editing state on sign out
+                isEditingHomeText = false;
+                isEditingCommunityLink = false;
+                // NEW RESETS
+                isEditingAboutText = false;
+                isEditingGameUrl = false;
+                // NEW: Reset admin form states
+                isCreatingMonster = false;
+                editingMonsterId = null;
+                isCreatingEvent = false;
+                editingEventId = null;
+                await signOut(auth);
+            } catch (error) {
+                console.error("Logout failed:", error);
+            }
+        };
+
+
+        async function setupFirebase() {
+            const isConfigMissing = !firebaseConfig.apiKey;
+
+            if (isConfigMissing) {
+                console.error("Firebase configuration is missing or incomplete. Cannot proceed with auth or data loading.");
+                return; 
+            }
+
+            // 1. Initialize Firebase and Services
+            setLogLevel('Debug');
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            
+            try {
+                getAnalytics(app);
+                console.log("Firebase Analytics initialized.");
+            } catch (e) {
+                console.warn("Could not initialize Firebase Analytics.", e);
+            }
+
+            // 2. Initial listener setup 
+            onAuthStateChanged(auth, (user) => {
+                
+                if (user) {
+                    currentUserId = user.uid;
+                    // Check if the user's email matches the admin email
+                    isAdmin = ADMIN_EMAILS.includes(user.email); 
+                    console.log("User authenticated. ID:", currentUserId, "Is Admin:", isAdmin);
+                } else {
+                    currentUserId = null;
+                    isAdmin = false;
+                    isEditingHomeText = false; // Reset editing state
+                    isEditingCommunityLink = false; // Reset editing state
+                    // NEW: Reset admin form states
+                    isCreatingMonster = false;
+                    editingMonsterId = null;
+                    isCreatingEvent = false;
+                    editingEventId = null;
+                    // NEW RESETS
+                    isEditingAboutText = false;
+                    isEditingGameUrl = false;
+                    console.log("User signed out. Login required.");
+                }
+                
+                // Update the navigation status bar (Log In/Sign Out buttons)
+                updateNavigationAuthStatus(user);
+
+                // Rebuild navigation links (for active state, although admin links are gone)
+                updateNavigationUI();
+                
+                // Ensure Home Page UI (Login/Play buttons) updates immediately when auth state changes
+                updateHomePageAuthArea(user); 
+                
+                // Start firestore listeners only once
+                if (!initialSiteTextLoaded) {
+                    setupFirestoreListeners();
+                }
+
+                // Re-render the current page to update admin views immediately
+                renderAllPages(); 
+                if (currentPage) navigateTo(currentPage);
+
+            });
+        }
+
+        // Utility to check and create initial data
+        async function checkAndCreateInitialData(collectionRef, initialData, name) {
+            try {
+                const snapshot = await getDocs(query(collectionRef)); // Use getDocs for initial check
+                if (snapshot.empty) {
+                    console.log(`No ${name} found. Creating default data.`);
+                    for (const item of initialData) {
+                        const dataToSave = name === 'monsters' ? { ...item, level: item.level || 'Class N/A', image: item.image || 'https://placehold.co/420x420/542E71/ffffff?text=Monster' } : item;
+                        await addDoc(collectionRef, dataToSave);
+                    }
+                }
+            } catch (e) {
+                console.error(`Error checking/creating initial ${name}:`, e);
+            }
+        }
+
+        // --- FIRESTORE LISTENERS ---
+        function setupFirestoreListeners() {
+            if (!db) return;
+            
+            // 1. Site Text Listener (Public Data)
+            const siteTextRef = doc(db, `${basePublicPath}/settings/site_text`);
+            onSnapshot(siteTextRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    siteText = docSnap.data();
+                    // Ensure new fields are defaulted if not present in DB
+                    siteText.communityLink = siteText.communityLink || 'https://discord.gg/rift-divers-community-placeholder';
+                    siteText.gameUrl = siteText.gameUrl || 'https://www.roblox.com/games/1234567890/lost-dimensions-placeholder'; 
+                    siteText.aboutContent = siteText.aboutContent || siteText.aboutContent; 
+                    console.log("Site text updated:", siteText);
+                } else {
+                    // Initialize default site text if it doesn't exist (includes new fields)
+                    setDoc(siteTextRef, siteText, { merge: true }).catch(e => console.error("Error creating default site text:", e));
+                }
+                
+                // Initialization Check
+                if (!initialSiteTextLoaded) {
+                    initialSiteTextLoaded = true;
+                    // Now that we have initial data, we can flag the app as ready
+                    initializeLostDimensionsApp();
+                }
+
+                // Re-render the affected pages
+                renderAllPages(); 
+                if (currentPage) navigateTo(currentPage);
+
+            }, (error) => { console.error("Error listening to site text:", error); });
+
+
+            // 2. Monsters Listener (Public Data)
+            const monstersCollectionRef = collection(db, `${basePublicPath}/monsters`);
+            checkAndCreateInitialData(monstersCollectionRef, initialMonsters, 'monsters');
+            
+            onSnapshot(monstersCollectionRef, (snapshot) => {
+                monstersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log("Monsters updated:", monstersData);
+                renderAllPages(); 
+                if (currentPage === 'monsters') navigateTo('monsters');
+            }, (error) => { console.error("Error listening to monsters:", error); });
+            
+            // 3. Events Listener (Public Data)
+            const eventsCollectionRef = collection(db, `${basePublicPath}/events`);
+            checkAndCreateInitialData(eventsCollectionRef, initialEvents, 'events');
+
+             onSnapshot(eventsCollectionRef, (snapshot) => {
+                eventsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log("Events updated:", eventsData);
+                renderAllPages();
+                if (currentPage === 'events') navigateTo('events');
+            }, (error) => { console.error("Error listening to events:", error); });
+        }
+
+
+        function updateHomePageAuthArea(user) {
+            const dynamicArea = document.getElementById('home-dynamic-auth-area');
+            if (!dynamicArea) return; 
+            
+            // Use the dynamic gameUrl from siteText
+            const playNowLink = `
+              <a
+                href="${siteText.gameUrl}"
+                target="_blank"
+                rel="noreferrer"
+                class="inline-block px-10 py-4 text-xl font-bold rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 transition duration-300 text-white shadow-lg shadow-purple-900/50 transform hover:scale-[1.05]"
+              >
+                Play Now
+              </a>`;
+            
+            let authContent = '';
+
+            if (user) {
+                const welcomeMessage = `
+                    <div class="animated-item text-center w-full max-w-xs md:max-w-md mx-auto p-3 mb-6 rounded-xl bg-indigo-900/40 border border-indigo-500/50 shadow-lg">
+                        <p class="text-xl font-semibold text-white">Welcome Back</p>
+                        <span class="sr-only">Rift Diver ID: ${user.uid}</span> 
+                    </div>
+                `;
+                
+                const buttonRow = `
+                    <div class="animated-item w-full flex justify-center items-center space-x-6">
+                        ${playNowLink}
+                    </div>
+                `;
+                
+                authContent = welcomeMessage + buttonRow;
+
+            } else {
+                const loginButton = `
+                    <button onclick="showLoginModal()" class="px-10 py-4 text-xl font-bold rounded-full bg-slate-200/10 border border-slate-700/50 text-slate-200 hover:bg-slate-200/20 transition duration-300 shadow-md transform hover:scale-[1.05]">
+                        Log In
+                    </button>
+                `;
+                
+                authContent = `
+                    <div class="animated-item w-full flex justify-center items-center space-x-6">
+                        ${loginButton}
+                        ${playNowLink}
+                    </div>
+                `;
+            }
+
+            dynamicArea.innerHTML = authContent; 
+            applyStaggeredAnimations(dynamicArea);
+        }
+
+        // --- PAGE TEMPLATES ---
+
+        window.toggleHomeEdit = function(isEditing) {
+            isEditingHomeText = isEditing;
+            isEditingGameUrl = false; // Close game URL edit if starting main text edit
+            renderAllPages();
+            navigateTo('home');
+        }
+
+        // --- GAME URL EDITING LOGIC ---
+        window.toggleGameUrlEdit = function(isEditing) {
+            isEditingGameUrl = isEditing;
+            isEditingHomeText = false; // Close main text edit if starting game URL edit
+            renderAllPages();
+            navigateTo('home');
+        }
+
+        function renderGameUrlForm() {
+             return `
+                <form onsubmit="event.preventDefault(); handleUpdateGameUrl(this)" class="animated-item w-full max-w-xl mx-auto mt-6 p-4 bg-void-mid rounded-xl shadow-lg border border-purple-500/50">
+                    <h4 class="text-lg font-semibold text-purple-400 mb-2">Update 'Play Now' Link</h4>
+                    <input type="url" id="gameUrlInput" name="gameUrl" value="${siteText.gameUrl || ''}" required 
+                        placeholder="https://www.roblox.com/games/..."
+                        class="w-full p-3 bg-void-dark border border-slate-700 rounded-lg text-white outline-none mb-3" />
+                    
+                    <div class="flex justify-end space-x-3">
+                        <button type="submit" class="py-2 px-4 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-bold transition">
+                            Save Game URL
+                        </button>
+                        <button type="button" onclick="toggleGameUrlEdit(false)" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition">
+                            Cancel
+                        </button>
+                    </div>
+                    <p id="game-url-message" class="mt-3 text-center text-sm hidden"></p>
+                </form>
+            `;
+        }
+
+        window.handleUpdateGameUrl = async function(form) {
+            if (!isAdmin) return displayAdminMessage("Permission Denied.", 'error', 'game-url-message');
+
+            const siteTextRef = doc(db, `${basePublicPath}/settings/site_text`);
+            const gameUrl = form.elements['gameUrl'].value;
+            
+            try {
+                await updateDoc(siteTextRef, { gameUrl });
+                displayAdminMessage("Game URL updated successfully!", 'success', 'game-url-message');
+                toggleGameUrlEdit(false); // Switch back to static view
+            } catch (e) {
+                displayAdminMessage(`Error updating Game URL: ${e.message}`, 'error', 'game-url-message');
+            }
+        }
+        // --- END GAME URL EDITING LOGIC ---
+
+        // --- NEW MONSTER FORM/DETAIL FUNCTIONS ---
+        window.showCreateMonsterForm = function() {
+            isCreatingMonster = true;
+            editingMonsterId = null;
+            renderAllPages();
+            navigateTo('monsters');
+            // Scroll to the form
+            setTimeout(() => document.getElementById('monster-form')?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+        
+        window.handleEditMonster = function(monsterId) {
+            const monsterExists = monstersData.find(m => m.id === monsterId);
+            if (!monsterExists) {
+                console.error(`handleEditMonster: Could not find monster in monstersData with ID: ${monsterId}. Aborting edit.`);
+                // FIX: Reset state and re-render the page to remove the stale card
+                editingMonsterId = null;
+                isCreatingMonster = false;
+                renderAllPages();
+                navigateTo('monsters');
+                return; 
+            }
+
+            editingMonsterId = monsterId;
+            isCreatingMonster = false;
+            renderAllPages();
+            navigateTo('monsters');
+            // Scroll to the form
+            setTimeout(() => document.getElementById('monster-form')?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+        
+        // NEW: Function to handle monster card click
+        window.handleMonsterCardClick = function(monsterId) {
+            const monster = monstersData.find(m => m.id === monsterId);
+            if (!monster) {
+                console.error(`Monster with ID ${monsterId} not found.`);
+                return;
+            }
+
+            if (isAdmin) {
+                // If the user is an admin, directly launch the edit form
+                handleEditMonster(monsterId);
+            } else {
+                // Standard user behavior: show details modal
+                showMonsterDetails(monster);
+            }
+        }
+
+
+        window.cancelMonsterForm = function() {
+            isCreatingMonster = false;
+            editingMonsterId = null;
+            renderAllPages();
+            navigateTo('monsters');
+        }
+
+        function renderMonsterForm() {
+            const isEditMode = !!editingMonsterId;
+            const monster = isEditMode ? monstersData.find(m => m.id === editingMonsterId) : {};
+            
+            if (isEditMode && !monster) {
+                console.error("Could not find monster to edit with ID:", editingMonsterId);
+                cancelMonsterForm(); // Reset state if monster not found
+                return '';
+            }
+
+            const title = isEditMode ? 'Edit Dimensional Threat' : 'Add New Dimensional Threat';
+            const buttonText = isEditMode ? 'Save Changes' : 'Add Monster';
+
+            return `
+                <div id="monster-form" class="animated-item p-6 bg-void-mid rounded-xl shadow-lg border border-red-600/50 mb-10">
+                    <h3 class="text-2xl font-semibold text-red-400 mb-4">${title}</h3>
+                    <form onsubmit="event.preventDefault(); handleMonsterFormSubmit(this)">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <input type="text" name="monsterName" required placeholder="Monster Name" value="${monster?.name || ''}" class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                            <input type="text" name="monsterLevel" required placeholder="Threat Level (e.g., Class V)" value="${monster?.level || 'Class N/A'}" class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                            <input type="url" name="monsterImage" placeholder="Image URL (Placeholder ok)" value="${monster?.image || ''}" class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                        </div>
+                        <div class="mt-4">
+                            <textarea name="monsterDescription" required rows="2" placeholder="Brief description of the threat..." class="w-full p-3 bg-void-dark border border-slate-700 rounded-lg text-white">${monster?.description || ''}</textarea>
+                        </div>
+                        <div class="flex items-center justify-between mt-4">
+                            <div>
+                                <button type="submit" class="py-2 px-4 bg-red-600 hover:bg-red-700 rounded-lg text-white font-bold transition">
+                                    ${buttonText}
+                                </button>
+                                <button type="button" onclick="cancelMonsterForm()" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition ml-4">
+                                    Cancel
+                                </button>
+                            </div>
+                            ${isEditMode ? `
+                                <button type="button" onclick="handleDeleteMonster('${editingMonsterId}')" class="text-sm text-gray-400 hover:text-red-400 font-bold transition">
+                                    Delete Monster
+                                </button>
+                            ` : ''}
+                        </div>
+                        <p id="monster-message" class="mt-4 text-center text-sm hidden"></p>
+                    </form>
+                </div>
+            `;
+        }
+        // --- END NEW MONSTER FORM/DETAIL FUNCTIONS ---
+
+        function renderHomePage() { 
+            let gameUrlEditHtml = '';
+            if (isAdmin && !isEditingHomeText) {
+                if (isEditingGameUrl) {
+                    gameUrlEditHtml = renderGameUrlForm();
+                } else {
+                    gameUrlEditHtml = `
+                        <div class="animated-item mt-4">
+                            <button onclick="toggleGameUrlEdit(true)" class="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 18.07a4.5 4.5 0 0 1-1.897 1.13L6 20l1.92-5.76a4.5 4.5 0 0 1 1.13-1.897l8.205-8.205ZM3 19.5v.75A2.25 2.25 0 0 0 5.25 22h14.5A2.25 2.25 0 0 0 22 19.5v-.75m-18-8.25v-.75" />
+                                </svg>
+                                Edit Game Link
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+            
+            return `
+                <section id="home-page" class="page-container max-w-7xl mx-auto px-6 py-16">
+                    <div class="text-center mb-20 pt-10">
+                        <div class="flex flex-col items-center">
+                            ${isEditingHomeText 
+                                ? `
+                                    <form onsubmit="event.preventDefault(); handleUpdateSiteText(this)" class="w-full max-w-3xl">
+                                        <input type="text" id="homeTitleInput" name="homeTitle" value="${siteText.title || ''}" required 
+                                            class="animated-item text-5xl md:text-7xl font-extrabold tracking-tighter text-white bg-transparent border-b border-purple-500/50 w-full text-center outline-none mb-4" />
+                                        
+                                        <textarea id="homeSubtitleInput" name="homeSubtitle" required rows="2" 
+                                            class="animated-item text-xl text-slate-400 font-light max-w-2xl mx-auto bg-void-dark/50 border border-slate-700 rounded-lg p-2 w-full text-center outline-none">${siteText.subtitle || ''}</textarea>
+                                        
+                                        <div class="mt-8 flex justify-center space-x-4">
+                                            <button type="submit" class="py-2 px-4 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-bold transition">
+                                                Save Changes
+                                            </button>
+                                            <button type="button" onclick="toggleHomeEdit(false)" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                        <p id="site-text-message" class="mt-4 text-center text-sm hidden"></p>
+                                    </form>
+                                `
+                                : `
+                                    <h1 class="animated-item text-6xl md:text-8xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-500 mb-4">
+                                        ${siteText.title || 'Lost Dimensions'}
+                                    </h1>
+                                    <p class="animated-item text-2xl text-slate-400 font-light max-w-2xl mx-auto">
+                                        ${siteText.subtitle || 'An immersive Roblox experience where reality bends and ancient secrets await discovery.'}
+                                    </p>
+                                    ${isAdmin && !isEditingGameUrl ? `
+                                        <button onclick="toggleHomeEdit(true)" class="animated-item mt-4 text-sm text-purple-400 hover:text-purple-300 transition-colors">
+                                            Edit Homepage Text
+                                        </button>
+                                    ` : ''}
+                                `
+                            }
+                        </div>
+                        
+                        <div id="home-dynamic-auth-area" class="mt-8 flex justify-center items-center flex-wrap">
+                            <!-- Content will be injected by updateHomePageAuthArea() -->
+                        </div>
+
+                        <!-- NEW: Game URL Edit Form/Button -->
+                        ${gameUrlEditHtml}
+                    </div>
+                </section>
+            `;
+        }
+        
+        function renderMonstersPage() { 
+            // NEW: Check if form should be rendered
+            const monsterForm = (isAdmin && (isCreatingMonster || editingMonsterId)) ? renderMonsterForm() : '';
+
+            // NEW: Show "Add" button if admin and no form is open
+            const addMonsterButton = (isAdmin && !isCreatingMonster && !editingMonsterId) ? `
+                <div class="animated-item mb-6 flex justify-end">
+                    <button onclick="showCreateMonsterForm()" class="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-bold transition shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                          <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                        </svg>
+                        Add Monster
+                    </button>
+                </div>
+            ` : '';
+
+            const monstersListContent = monstersData.length > 0 
+                ? `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        ${monstersData.map((m) => `
+                            <article onclick="handleMonsterCardClick('${m.id}')" 
+                                class="animated-item monster-card bg-[#070812]/70 border border-slate-700/30 rounded-2xl overflow-hidden backdrop-blur-md shadow-xl cursor-pointer hover:border-purple-500">
+                                <div class="w-full h-48 relative overflow-hidden">
+                                    <img src="${m.image}" alt="${m.name}" class="w-full h-full object-cover transition duration-500 hover:scale-[1.1]" onerror="this.onerror=null;this.src='https://placehold.co/420x420/542E71/ffffff?text=Image+Missing';" />
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent" />
+                                    <span class="absolute bottom-2 right-4 text-xs font-mono bg-purple-600/80 px-2 py-1 rounded-full">Level: ${m.level || 'Unknown'}</span>
+                                </div>
+        
+                                <div class="p-5">
+                                    <h3 class="text-2xl text-white font-bold mb-2 transition duration-200 hover:text-purple-400">
+                                        ${m.name}
+                                    </h3>
+                                    <p class="mt-2 text-slate-300 text-sm italic border-l-2 border-slate-500 pl-3 line-clamp-2">
+                                        ${m.description}
+                                    </p>
+                                </div>
+                            </article>
+                        `).join('')}
+                    </div>
+                `
+                : `
+                    <div class="animated-item p-10 text-center bg-void-mid rounded-xl border-2 border-dashed border-slate-700/50">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 mx-auto text-red-400 mb-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                        </svg>
+                        <p class="text-xl font-semibold text-slate-300">
+                            No dimensional threats detected.
+                        </p>
+                        <p class="text-slate-400 mt-2">
+                            All rifts are quiet... for now. Check back when the collapse deepens!
+                        </p>
+                    </div>
+                `;
+
+            return `
+                <section id="monsters-page" class="page-container max-w-6xl mx-auto px-6 py-12">
+                    <h2 class="animated-item text-3xl font-bold text-white mb-8 border-b border-purple-500/30 pb-3">
+                        Dimensional Threats
+                    </h2>
+                    
+                    ${addMonsterButton}
+                    ${monsterForm}
+        
+                    ${monstersListContent}
+        
+                </section>
+            `;
+        }
+
+        // --- NEW EVENT FORM FUNCTIONS ---
+        window.showCreateEventForm = function() {
+            isCreatingEvent = true;
+            editingEventId = null;
+            renderAllPages();
+            navigateTo('events');
+            setTimeout(() => document.getElementById('event-form')?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+        
+        window.handleEditEvent = function(eventId) {
+            const eventExists = eventsData.find(e => e.id === eventId);
+            if (!eventExists) {
+                console.error(`handleEditEvent: Could not find event in eventsData with ID: ${eventId}. Aborting edit.`);
+                // FIX: Reset state and re-render the page to remove the stale card
+                editingEventId = null;
+                isCreatingEvent = false;
+                renderAllPages();
+                navigateTo('events');
+                return;
+            }
+
+            editingEventId = eventId;
+            isCreatingEvent = false;
+            renderAllPages();
+            navigateTo('events');
+            setTimeout(() => document.getElementById('event-form')?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+
+        window.cancelEventForm = function() {
+            isCreatingEvent = false;
+            editingEventId = null;
+            renderAllPages();
+            navigateTo('events');
+        }
+
+        function renderEventForm() {
+            const isEditMode = !!editingEventId;
+            const event = isEditMode ? eventsData.find(e => e.id === editingEventId) : {};
+
+            if (isEditMode && !event) {
+                console.error("Could not find event to edit with ID:", editingEventId);
+                cancelEventForm(); // Reset state
+                return '';
+            }
+
+            const title = isEditMode ? 'Edit Event' : 'Create New Event';
+            const buttonText = isEditMode ? 'Save Changes' : 'Add Event';
+            
+            // Helper to select the correct option in dropdowns
+            const selected = (val1, val2) => val1 === val2 ? 'selected' : '';
+
+            return `
+                <div id="event-form" class="animated-item p-6 bg-void-mid rounded-xl shadow-lg border border-indigo-600/50 mb-10">
+                    <h3 class="text-2xl font-semibold text-indigo-400 mb-4">${title}</h3>
+                    <form onsubmit="event.preventDefault(); handleEventFormSubmit(this)">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input type="text" name="eventTitle" required placeholder="Event Title" value="${event?.title || ''}" class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                            <input type="text" name="eventDate" required placeholder="Duration (e.g., Jan 1 - Jan 15)" value="${event?.date || ''}" class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                            <select name="eventStatus" required class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                                <option value="Active" ${selected(event?.status, 'Active')}>Active</option>
+                                <option value="Upcoming" ${selected(event?.status, 'Upcoming')}>Upcoming</option>
+                                <option value="Scheduled" ${selected(event?.status, 'Scheduled')}>Scheduled</option>
+                            </select>
+                            <select name="eventTheme" required class="p-3 bg-void-dark border border-slate-700 rounded-lg text-white">
+                                <option value="bg-red-900/40 border-red-700" ${selected(event?.theme, 'bg-red-900/40 border-red-700')}>Red (Active Theme)</option>
+                                <option value="bg-gray-900/40 border-gray-700" ${selected(event?.theme, 'bg-gray-900/40 border-gray-700')}>Gray (Upcoming Theme)</option>
+                                <option value="bg-indigo-900/40 border-indigo-700" ${selected(event?.theme, 'bg-indigo-900/40 border-indigo-700')}>Indigo (Scheduled Theme)</option>
+                            </select>
+                        </div>
+                        <div class="mt-4">
+                            <textarea name="eventDescription" required rows="2" placeholder="Event description and rewards..." class="w-full p-3 bg-void-dark border border-slate-700 rounded-lg text-white">${event?.description || ''}</textarea>
+                        </div>
+                        <div class="flex items-center justify-between mt-4">
+                            <div>
+                                <button type="submit" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold transition">
+                                    ${buttonText}
+                                </button>
+                                <button type="button" onclick="cancelEventForm()" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition ml-4">
+                                    Cancel
+                                </button>
+                            </div>
+                            ${isEditMode ? `
+                                <button type="button" onclick="handleDeleteEvent('${editingEventId}')" class="text-sm text-gray-400 hover:text-red-400 font-bold transition">
+                                    Delete Event
+                                </button>
+                            ` : ''}
+                        </div>
+                        <p id="event-message" class="mt-4 text-center text-sm hidden"></p>
+                    </form>
+                </div>
+            `;
+        }
+        // --- END NEW EVENT FORM FUNCTIONS ---
+
+        function renderEventsPage() { 
+            // NEW: Check if form should be rendered
+            const eventForm = (isAdmin && (isCreatingEvent || editingEventId)) ? renderEventForm() : '';
+
+            // NEW: Show "Add" button if admin and no form is open
+            const addEventButton = (isAdmin && !isCreatingEvent && !editingEventId) ? `
+                <div class="animated-item mb-6 flex justify-end">
+                    <button onclick="showCreateEventForm()" class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold transition shadow-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                          <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                        </svg>
+                        Add Event
+                    </button>
+                </div>
+            ` : '';
+
+            const eventsListContent = eventsData.length > 0 
+                ? `
+                    <div class="space-y-6">
+                        ${eventsData.map((event) => `
+                            <div class="animated-item p-6 rounded-xl border-l-8 ${event.theme} shadow-lg">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="text-2xl font-bold text-white">${event.title}</h3>
+                                    <span class="text-xs uppercase font-mono px-3 py-1 rounded-full ${
+                                        event.status === 'Active' ? 'bg-green-500 text-black' : 'bg-slate-500/50 text-slate-200'
+                                    }">
+                                        ${event.status}
+                                    </span>
+                                </div>
+                                <p class="text-slate-300 text-md mb-3">${event.description}</p>
+                                <div class="text-sm font-medium text-purple-300">
+                                    Duration: ${event.date}
+                                </div>
+                                
+                                <!-- ADMIN EDIT BUTTON -->
+                                ${isAdmin ? `
+                                    <div class="mt-4 pt-3 border-t border-slate-700/50 flex justify-end">
+                                        <button onclick="handleEditEvent('${event.id}')" class="text-sm text-purple-400 hover:text-purple-300 font-bold transition">
+                                            Edit
+                                        </button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+                : `
+                    <div class="animated-item p-10 text-center bg-void-mid rounded-xl border-2 border-dashed border-slate-700/50">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 mx-auto text-purple-400 mb-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5m18 7.5v-7.5" />
+                        </svg>
+                        <p class="text-xl font-semibold text-slate-300">
+                            No active or upcoming events scheduled.
+                        </p>
+                        <p class="text-slate-400 mt-2">
+                            Check back soon! The rift usually opens for new events every few weeks.
+                        </p>
+                    </div>
+                `;
+
+            return `
+                <section id="events-page" class="page-container max-w-4xl mx-auto px-6 py-12">
+                    <h2 class="animated-item text-3xl font-bold text-white mb-8 border-b border-purple-500/30 pb-3">
+                        Current & Upcoming Events
+                    </h2>
+        
+                    ${addEventButton}
+                    ${eventForm}
+
+                    ${eventsListContent}
+                </section>
+            `;
+        }
+
+        // --- NEW COMMUNITY PAGE RENDER ---
+        window.toggleCommunityLinkEdit = function(isEditing) {
+            isEditingCommunityLink = isEditing;
+            renderAllPages();
+            navigateTo('community');
+        }
+
+        function renderCommunityPage() { 
+            const link = siteText.communityLink || 'https://discord.gg/rift-divers-community-placeholder';
+
+            let content;
+
+            if (isAdmin && isEditingCommunityLink) {
+                // ADMIN EDIT FORM
+                content = `
+                    <div class="animated-item p-6 bg-void-mid rounded-xl shadow-lg border border-purple-600/50 mb-10">
+                        <h3 class="text-2xl font-semibold text-purple-400 mb-4">Edit Community Link (Discord)</h3>
+                        <form onsubmit="event.preventDefault(); handleUpdateCommunityLink(this)">
+                            <div class="mt-4">
+                                <label for="communityLinkInput" class="block text-sm font-medium text-slate-400 mb-1">Discord Invite URL</label>
+                                <input type="url" id="communityLinkInput" name="communityLinkInput" required placeholder="https://discord.gg/..." value="${link}" 
+                                    class="w-full p-3 bg-void-dark border border-slate-700 rounded-lg text-white focus:ring-purple-500 focus:border-purple-500 outline-none" />
+                            </div>
+                            <div class="mt-6 flex justify-between items-center">
+                                <div>
+                                    <button type="submit" class="py-2 px-4 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-bold transition">
+                                        Save Link
+                                    </button>
+                                    <button type="button" onclick="toggleCommunityLinkEdit(false)" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition ml-4">
+                                        Cancel
+                                    </button>
+                                </div>
+                                <p id="community-link-message" class="text-sm text-red-400 hidden"></p>
+                            </div>
+                        </form>
+                    </div>
+                `;
+            } else {
+                // STANDARD VIEW
+                content = `
+                    <div class="animated-item text-center">
+                        <h3 class="text-2xl font-bold text-white mb-6">Join the Rift Divers Community</h3>
+                        
+                        <a href="${link}" target="_blank" rel="noopener noreferrer" 
+                           class="flex flex-col items-center justify-center p-8 w-64 h-64 mx-auto rounded-3xl bg-indigo-900/60 border-4 border-indigo-500/80 shadow-2xl transition duration-300 transform hover:scale-[1.05] hover:bg-indigo-900/80 group">
+                            <!-- Discord Logo SVG (Using Discord's official color palette for the SVG) -->
+                            <svg class="w-20 h-20 text-indigo-300 group-hover:text-white transition duration-300" viewBox="0 0 127.7 96.3" xmlns="http://www.w3.org/2000/svg">
+                                <path fill="currentColor" d="M107.4 8.7c-6-3.8-12-6.2-18.4-7.2-1.3-3.7-3.3-7-5.8-10.7-3.9-3.9-8.4-5.2-13.8-5.2-4.9 0-9.4 1.3-13.8 5.2-2.5 3.7-4.5 7-5.8 10.7-6.4 1-12.4 3.4-18.4 7.2-11.2 7.1-15 16.6-15 28.1 0 11.5 3.8 21 15 28.1 6 3.8 12 6.2 18.4 7.2 1.3 3.7 3.3 7 5.8 10.7 3.9 3.9 8.4 5.2 13.8 5.2 4.9 0 9.4-1.3 13.8-5.2 2.5-3.7 4.5-7 5.8-10.7 6.4-1 12.4-3.4 18.4-7.2 11.2-7.1 15-16.6 15-28.1 0-11.5-3.8-21-15-28.1zm-42.3 53.6c-4.3 0-7.8-3.5-7.8-7.8s3.5-7.8 7.8-7.8 7.8 3.5 7.8 7.8-3.5 7.8-7.8 7.8zm25.8 0c-4.3 0-7.8-3.5-7.8-7.8s3.5-7.8 7.8-7.8 7.8 3.5 7.8 7.8-3.5 7.8-7.8 7.8z"/>
+                            </svg>
+                            <span class="mt-4 text-xl font-extrabold text-white">
+                                Join Discord
+                            </span>
+                        </a>
+                        
+                        <p class="mt-8 text-slate-400 italic">
+                            Connect with other Rift Divers, share strategies, and get early news on updates.
+                        </p>
+                    </div>
+                `;
+            }
+
+            return `
+                <section id="community-page" class="page-container max-w-4xl mx-auto px-6 py-12">
+                    <div class="flex justify-between items-center mb-8 border-b border-purple-500/30 pb-3">
+                        <h2 class="animated-item text-3xl font-bold text-white">
+                            Rift Diver Community Hub
+                        </h2>
+                        ${isAdmin && !isEditingCommunityLink ? `
+                            <button onclick="toggleCommunityLinkEdit(true)" class="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 18.07a4.5 4.5 0 0 1-1.897 1.13L6 20l1.92-5.76a4.5 4.5 0 0 1 1.13-1.897l8.205-8.205ZM3 19.5v.75A2.25 2.25 0 0 0 5.25 22h14.5A2.25 2.25 0 0 0 22 19.5v-.75m-18-8.25v-.75" />
+                                </svg>
+                                Edit Link
+                            </button>
+                        ` : ''}
+                    </div>
+                    ${content}
+                </section>
+            `;
+        }
+        
+        // NEW: About Page Edit Logic
+        window.toggleAboutEdit = function(isEditing) {
+            isEditingAboutText = isEditing;
+            renderAllPages();
+            navigateTo('about');
+        }
+
+        window.handleUpdateAboutText = async function(form) {
+            if (!isAdmin) return displayAdminMessage("Permission Denied.", 'error', 'about-text-message');
+
+            const siteTextRef = doc(db, `${basePublicPath}/settings/site_text`);
+            const aboutContent = form.elements['aboutContent'].value;
+            
+            try {
+                await updateDoc(siteTextRef, { aboutContent });
+                displayAdminMessage("About content updated successfully!", 'success', 'about-text-message');
+                toggleAboutEdit(false); // Switch back to static view
+            } catch (e) {
+                displayAdminMessage(`Error updating About content: ${e.message}`, 'error', 'about-text-message');
+            }
+        }
+
+        function renderAboutPage() { 
+            return `
+                <section id="about-page" class="page-container max-w-4xl mx-auto px-6 py-12">
+                    <div class="flex justify-between items-center mb-8 border-b border-purple-500/30 pb-3">
+                        <h2 class="animated-item text-3xl font-bold text-white">
+                            The Dimensional Collapse: Our Story
+                        </h2>
+                        ${isAdmin && !isEditingAboutText ? `
+                            <button onclick="toggleAboutEdit(true)" class="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 18.07a4.5 4.5 0 0 1-1.897 1.13L6 20l1.92-5.76a4.5 4.5 0 0 1 1.13-1.897l8.205-8.205ZM3 19.5v.75A2.25 2.25 0 0 0 5.25 22h14.5A2.25 2.25 0 0 0 22 19.5v-.75m-18-8.25v-.75" />
+                                </svg>
+                                Edit Content
+                            </button>
+                        ` : ''}
+                    </div>
+        
+                    ${isEditingAboutText 
+                        ? `
+                            <form onsubmit="event.preventDefault(); handleUpdateAboutText(this)">
+                                <textarea id="aboutContentInput" name="aboutContent" required rows="10" 
+                                    class="animated-item text-lg w-full p-4 bg-void-dark/50 border border-slate-700 rounded-lg text-white outline-none leading-relaxed">${siteText.aboutContent || ''}</textarea>
+                                
+                                <div class="mt-6 flex justify-end space-x-4">
+                                    <button type="submit" class="py-2 px-4 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-bold transition">
+                                        Save Changes
+                                    </button>
+                                    <button type="button" onclick="toggleAboutEdit(false)" class="py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition">
+                                        Cancel
+                                    </button>
+                                </div>
+                                <p id="about-text-message" class="mt-4 text-center text-sm hidden"></p>
+                            </form>
+                        `
+                        : `
+                            <div class="animated-item text-lg text-slate-300 leading-relaxed whitespace-pre-wrap">${siteText.aboutContent || 'About content missing.'}</div>
+                        `
+                    }
+                </section>
+            `;
+        }
+
+        /**
+         * Renders all page templates into the main content div.
+         */
+        function renderAllPages() {
+            const contentDiv = document.getElementById('page-content');
+            contentDiv.innerHTML = [
+                renderHomePage(),
+                renderMonstersPage(),
+                renderEventsPage(),
+                renderCommunityPage(), 
+                renderAboutPage(), // Updated call
+            ].join('');
+        }
+
+        /**
+         * The main initialization function that activates content after structure and initial data is ready.
+         */
+        function initializeLostDimensionsApp() {
+            if (appInitialized) return;
+
+            appInitialized = true;
+            console.log("App fully initialized after initial data load.");
+        }
+        
+        // --- ADMIN FIREBASE ACTIONS ---
+        function displayAdminMessage(message, type, targetId) {
+            const msgElement = document.getElementById(targetId);
+            if (!msgElement) return;
+
+            msgElement.textContent = message;
+            msgElement.classList.remove('hidden', 'text-red-400', 'text-green-400');
+            if (type === 'error') {
+                msgElement.classList.add('text-red-400');
+            } else {
+                msgElement.classList.add('text-green-400');
+            }
+            setTimeout(() => msgElement.classList.add('hidden'), 5000);
+        }
+
+        window.handleUpdateSiteText = async function(form) {
+            if (!isAdmin) return displayAdminMessage("Permission Denied.", 'error', 'site-text-message');
+
+            const siteTextRef = doc(db, `${basePublicPath}/settings/site_text`);
+            const title = form.elements['homeTitle'].value;
+            const subtitle = form.elements['homeSubtitle'].value;
+            
+            try {
+                await updateDoc(siteTextRef, { title, subtitle });
+                displayAdminMessage("Site text updated successfully!", 'success', 'site-text-message');
+                toggleHomeEdit(false); // Switch back to static view
+            } catch (e) {
+                displayAdminMessage(`Error updating site text: ${e.message}`, 'error', 'site-text-message');
+            }
+        }
+        
+        // NEW: Handler for updating the Community Link
+        window.handleUpdateCommunityLink = async function(form) {
+            if (!isAdmin) return displayAdminMessage("Permission Denied.", 'error', 'community-link-message');
+
+            const siteTextRef = doc(db, `${basePublicPath}/settings/site_text`);
+            const newLink = form.elements['communityLinkInput'].value;
+            
+            try {
+                await updateDoc(siteTextRef, { communityLink: newLink });
+                displayAdminMessage("Community link updated successfully!", 'success', 'community-link-message');
+                toggleCommunityLinkEdit(false); // Switch back to static view
+            } catch (e) {
+                displayAdminMessage(`Error updating community link: ${e.message}`, 'error', 'community-link-message');
+            }
+        }
+
+        // --- NEW UNIFIED MONSTER FORM HANDLER ---
+        window.handleMonsterFormSubmit = async function(form) {
+            if (!isAdmin) return displayAdminMessage("Permission Denied.", 'error', 'monster-message');
+            console.log("handleMonsterFormSubmit called..."); // NEW LOG
+
+            const name = form.elements['monsterName'].value;
+            const description = form.elements['monsterDescription'].value;
+            const image = form.elements['monsterImage'].value || `https://placehold.co/420x420/800080/ffffff?text=${name}`;
+            const level = form.elements['monsterLevel'].value;
+            const monsterData = { name, description, image, level };
+
+            try {
+                if (editingMonsterId) {
+                    // UPDATE existing monster
+                    console.log(`Attempting to UPDATE monster with ID: ${editingMonsterId}`); // NEW LOG
+                    const monsterRef = doc(db, `${basePublicPath}/monsters`, editingMonsterId);
+                    await updateDoc(monsterRef, monsterData);
+                    displayAdminMessage("Monster updated successfully!", 'success', 'monster-message');
+                    console.log("Update successful."); // NEW LOG
+                } else {
+                    // CREATE new monster
+                    console.warn(`editingMonsterId is null or undefined. Creating a NEW monster.`); // NEW LOG
+                    const monstersCollectionRef = collection(db, `${basePublicPath}/monsters`);
+                    await addDoc(monstersCollectionRef, monsterData);
+                    displayAdminMessage("Monster created successfully!", 'success', 'monster-message');
+                    console.log("Create successful."); // NEW LOG
+                }
+                cancelMonsterForm(); // Close form and reset state
+                form.reset();
+            } catch (e) {
+                console.error("Error saving monster:", e); // CONSOLE ERROR for visibility
+                displayAdminMessage(`Error saving monster: ${e.message}`, 'error', 'monster-message');
+            }
+        }
+
+        window.handleDeleteMonster = async function(monsterId) {
+            if (!isAdmin) return;
+            const confirmed = await showConfirmation("Permanently delete this Dimensional Threat?");
+            if (!confirmed) return;
+
+            const monsterRef = doc(db, `${basePublicPath}/monsters`, monsterId);
+            try {
+                await deleteDoc(monsterRef);
+                // No message needed here, the UI updates via the onSnapshot listener
+                console.log(`Monster ${monsterId} deleted.`);
+                // NEW: Reset state if we were editing the deleted monster
+                if (editingMonsterId === monsterId) {
+                    cancelMonsterForm();
+                }
+            } catch (e) {
+                displayAdminMessage(`Error deleting monster: ${e.message}`, 'error', 'monster-message');
+            }
+        }
+        
+        // --- NEW UNIFIED EVENT FORM HANDLER ---
+        window.handleEventFormSubmit = async function(form) {
+            if (!isAdmin) return displayAdminMessage("Permission Denied.", 'error', 'event-message');
+
+            const title = form.elements['eventTitle'].value;
+            const date = form.elements['eventDate'].value;
+            const description = form.elements['eventDescription'].value;
+            const status = form.elements['eventStatus'].value;
+            const theme = form.elements['eventTheme'].value; 
+            const eventData = { title, date, description, status, theme };
+
+            try {
+                if (editingEventId) {
+                    // UPDATE existing event
+                    const eventRef = doc(db, `${basePublicPath}/events`, editingEventId);
+                    await updateDoc(eventRef, eventData);
+                    displayAdminMessage("Event updated successfully!", 'success', 'event-message');
+                } else {
+                    // CREATE new event
+                    const eventsCollectionRef = collection(db, `${basePublicPath}/events`);
+                    await addDoc(eventsCollectionRef, eventData);
+                    displayAdminMessage("Event created successfully!", 'success', 'event-message');
+                }
+                cancelEventForm(); // Close form and reset state
+                form.reset();
+            } catch (e) {
+                displayAdminMessage(`Error saving event: ${e.message}`, 'error', 'event-message');
+            }
+        }
+
+        window.handleDeleteEvent = async function(eventId) {
+            if (!isAdmin) return;
+            const confirmed = await showConfirmation("Permanently delete this event record?");
+            if (!confirmed) return;
+
+            const eventRef = doc(db, `${basePublicPath}/events`, eventId);
+            try {
+                await deleteDoc(eventRef);
+                // No message needed here, the UI updates via the onSnapshot listener
+                console.log(`Event ${eventId} deleted.`);
+                // NEW: Reset state if we were editing the deleted event
+                if (editingEventId === eventId) {
+                    cancelEventForm();
+                }
+            } catch (e) {
+                displayAdminMessage(`Error deleting event: ${e.message}`, 'error', 'event-message');
+            }
+        }
+        
+        // --- ENTRY POINT ---
+        window.onload = () => {
+            // 1. Render all HTML pages (using initial/default data)
+            renderAllPages(); 
+            
+            // CRITICAL FIX 1: Navigate to home immediately to display the initial view 
+            navigateTo('home');
+            
+            // CRITICAL FIX 2: Hide the loading spinner immediately to show the content.
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'none';
+            }
+            
+            // 3. Start Firebase setup, which will handle authentication and data listeners.
+            setupFirebase();
+        };
+    </script>
+</body>
+</html>
